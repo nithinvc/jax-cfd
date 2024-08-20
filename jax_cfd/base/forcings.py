@@ -21,10 +21,8 @@ import functools
 from typing import Callable, Optional, Tuple
 
 import jax.numpy as jnp
-from jax_cfd.base import equations
-from jax_cfd.base import filter_utils
-from jax_cfd.base import grids
-from jax_cfd.base import validation_problems
+
+from jax_cfd.base import equations, filter_utils, grids, validation_problems
 
 Array = grids.Array
 GridArrayVector = grids.GridArrayVector
@@ -101,6 +99,33 @@ def kolmogorov_forcing(
   def forcing(v):
     del v
     return f
+  return forcing
+
+def transient_flow_forcing(grid: grids.Grid,
+                           scale: float = 0.1,
+                           offsets: Optional[Tuple[Tuple[float, ...], ...]] = None,
+                           ) -> ForcingFn:
+  """Returns a transient flow forcing function for turbulence in 2D.
+  In vorticity form, the corresponds to:
+    scale * (sin(2pi(x+y) + cos(2pi(x+y))))
+  
+  Instead, we use the velocity form, and the corresponding forcing function is:
+    (scale / 2 pi) * sin(2pi(x+y)) - cos(2pi(x+y))
+  Which we obtain by integrating the vorticity form with respect to x,
+  and akin to only forcing vy.
+  """
+  if offsets is None:
+    offsets = grid.cell_faces
+  tau = 2 * jnp.pi
+  constant_factor = scale / tau
+
+  assert grid.ndim == 2, "Currently, only 2D is supported for transient flow forcing."
+  x, y = grid.mesh(offsets[0])
+  v = constant_factor * grids.GridArray(jnp.sin(tau * (x + y)) + jnp.cos(tau * (x+y)), offsets[0], grid)
+  u = grids.GridArray(jnp.zeros_like(v.data), (1, 1/2), grid)
+  def forcing(fields):
+    del fields
+    return (u, v)
   return forcing
 
 
