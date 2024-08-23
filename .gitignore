@@ -1,0 +1,16 @@
+# PYTHON #
+##########
+__pycache__
+*.egg-info
+/build/**
+
+### ipynb caching ###
+**/.ipynb_checkpoints/*
+
+#  FILE  #
+##########
+*.npy
+
+#  Plots  #
+##########
+plots/*.png
