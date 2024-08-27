@@ -21,14 +21,6 @@ def generate_random_vorticity_field(key, grid, max_velocity, peak_wavenumber):
     return jnp.fft.rfftn(vorticity0)
 
 
-def generate_solution_template(key, sample_ic, trajectory_fn):
-    vorticity_hat0 = sample_ic(key)
-    _, spectral_trajectory = trajectory_fn(vorticity_hat0)
-    # Not a necessary step. We could store in a spectral representation but,
-    # they consume the same amount of space so we preprocess.
-    return jnp.fft.irfftn(spectral_trajectory, axes=(1, 2))
-
-
 def generate_output_folder_name(args):
     folder_name = f"ns_{args.resolution}x{args.resolution}_visc_{args.viscosity}_drag_{args.drag}_T{args.simulation_time}_forcing_{args.forcing_func}"
     return os.path.join(args.output_dir, folder_name)
@@ -74,8 +66,10 @@ def main():
     parser.add_argument("--kolmogorov_wavenumber", type=int, default=4)
     # TF args
     parser.add_argument("--transient_scale", type=float, default=0.1)
+    parser.add_argument("--downsample", type=int, default=-1)
 
     args = parser.parse_args()
+    downsample = args.downsample
 
     # Ensure output directory exists
     output_dir = generate_output_folder_name(args)
@@ -162,6 +156,28 @@ def main():
     )
 
     # Function mapping rngkey -> trajectory
+    def generate_solution_template(key, sample_ic, trajectory_fn):
+        vorticity_hat0 = sample_ic(key)
+        _, spectral_trajectory = trajectory_fn(vorticity_hat0)
+        # Not a necessary step. We could store in a spectral representation but,
+        # they consume the same amount of space so we preprocess.
+        if downsample > 0:
+            vel_sp = spectral.utils.vorticity_to_velocity(grid)(spectral_trajectory)
+            vel_real = [jnp.fft.irfftn(v, axes=(1, 2)) for v in vel_sp]
+            dst_grid = grids.Grid(
+                (resolution // downsample, resolution // downsample),
+                domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi)),
+            )
+            small_traj = cfd.resize.downsample_staggered_velocity(
+                grid, dst_grid, vel_real
+            )
+            kx, ky = dst_grid.rfft_mesh()
+            small_traj = [jnp.fft.rfftn(v, axes=(1, 2)) for v in small_traj]
+            small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
+            spectral_trajectory = small_traj
+
+        return jnp.fft.irfftn(spectral_trajectory, axes=(1, 2))
+
     generate_solution = jax.jit(
         jax.vmap(
             partial(
