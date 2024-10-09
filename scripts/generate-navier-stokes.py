@@ -162,8 +162,8 @@ def main():
         vel_sp = spectral.utils.vorticity_to_velocity(grid)(trajectory)
         vel_real = [jnp.fft.irfftn(v, axes=(1, 2)) for v in vel_sp]
         dst_grid = grids.Grid(
-            (outer_steps, resolution // downsample, resolution // downsample),
-            domain=((0, outer_steps), (0, 2 * jnp.pi), (0, 2 * jnp.pi)),
+            (resolution // downsample, resolution // downsample),
+            domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi)),
         )
         small_traj = cfd.resize.downsample_staggered_velocity(grid, dst_grid, vel_real)
         kx, ky = dst_grid.rfft_mesh()
