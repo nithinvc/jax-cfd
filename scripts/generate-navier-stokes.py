@@ -156,25 +156,28 @@ def main():
     )
 
     # Function mapping rngkey -> trajectory
+
+    @jax.vmap
+    def downsample_fn(trajectory):
+        vel_sp = spectral.utils.vorticity_to_velocity(grid)(trajectory)
+        vel_real = [jnp.fft.irfftn(v, axes=(1, 2)) for v in vel_sp]
+        dst_grid = grids.Grid(
+            (outer_steps, resolution // downsample, resolution // downsample),
+            domain=((0, outer_steps), (0, 2 * jnp.pi), (0, 2 * jnp.pi)),
+        )
+        small_traj = cfd.resize.downsample_staggered_velocity(grid, dst_grid, vel_real)
+        kx, ky = dst_grid.rfft_mesh()
+        small_traj = [jnp.fft.rfftn(v, axes=(1, 2)) for v in small_traj]
+        small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
+        return small_traj
+
     def generate_solution_template(key, sample_ic, trajectory_fn):
         vorticity_hat0 = sample_ic(key)
         _, spectral_trajectory = trajectory_fn(vorticity_hat0)
         # Not a necessary step. We could store in a spectral representation but,
         # they consume the same amount of space so we preprocess.
         if downsample > 0:
-            vel_sp = spectral.utils.vorticity_to_velocity(grid)(spectral_trajectory)
-            vel_real = [jnp.fft.irfftn(v, axes=(1, 2)) for v in vel_sp]
-            dst_grid = grids.Grid(
-                (resolution // downsample, resolution // downsample),
-                domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi)),
-            )
-            small_traj = cfd.resize.downsample_staggered_velocity(
-                grid, dst_grid, vel_real
-            )
-            kx, ky = dst_grid.rfft_mesh()
-            small_traj = [jnp.fft.rfftn(v, axes=(1, 2)) for v in small_traj]
-            small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
-            spectral_trajectory = small_traj
+            spectral_trajectory = downsample_fn(spectral_trajectory)
 
         return jnp.fft.irfftn(spectral_trajectory, axes=(1, 2))
 
