@@ -18,7 +18,7 @@ do
     --drag 0.1 \
     --simulation_time 15.0 \
     --save_dt 0.25 \
-    --num_trajectories 112 \ 
+    --num_trajectories 112 \
     --batch_size 16 \
     --forcing_func kolmogorov \
     --resolution 512 \
@@ -33,7 +33,7 @@ do
     --simulation_time 15.0 \
     --save_dt 0.25 \
     --forcing_func kolmogorov \
-    --num_trajectories 112 \ 
+    --num_trajectories 112 \
     --batch_size 16 \
     --resolution 512 \
     --burn_in 41 \
@@ -48,7 +48,7 @@ do
     --save_dt 0.25 \
     --forcing_func kolmogorov \
     --resolution 512 \
-    --num_trajectories 112 \ 
+    --num_trajectories 112 \
     --batch_size 16 \
     --burn_in 41 \
     --kolmogorov_wavenumber 2 \
@@ -61,7 +61,7 @@ do
     --simulation_time 15.0 \
     --save_dt 0.25 \
     --forcing_func kolmogorov \
-    --num_trajectories 112 \ 
+    --num_trajectories 112 \
     --batch_size 16 \
     --resolution 512 \
     --burn_in 41 \

@@ -19,4 +19,4 @@
 
 source setupNERSC.sh
 
-./multiparameter.sh
+srun ./multiparameter.sh
