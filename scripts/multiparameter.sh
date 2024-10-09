@@ -25,7 +25,7 @@ do
     --resolution 512 \
     --burn_in 41 \
     --kolmogorov_wavenumber 2 \
-    --viscosity "{$viscositiesgpuone[$i]}" \
+    --viscosity "${viscositiesgpuone[$i]}" \
     --downsample 8 &
 
     CUDA_VISIBLE_DEVICES=$gputwo python generate-navier-stokes.py \
@@ -39,7 +39,7 @@ do
     --resolution 512 \
     --burn_in 41 \
     --kolmogorov_wavenumber 2 \
-    --viscosity "{$viscositiesgputwo[$i]}" \
+    --viscosity "${viscositiesgputwo[$i]}" \
     --downsample 8 &
 
     CUDA_VISIBLE_DEVICES=$gputhree python generate-navier-stokes.py \
@@ -53,7 +53,7 @@ do
     --batch_size 16 \
     --burn_in 41 \
     --kolmogorov_wavenumber 2 \
-    --viscosity "{$viscositiesgputhree[$i]}" \
+    --viscosity "${viscositiesgputhree[$i]}" \
     --downsample 8 &
 
     CUDA_VISIBLE_DEVICES=$gpufour python generate-navier-stokes.py \
@@ -67,7 +67,7 @@ do
     --resolution 512 \
     --burn_in 41 \
     --kolmogorov_wavenumber 2 \
-    --viscosity "{$viscositiesgpufour[$i]}" \
+    --viscosity "${viscositiesgpufour[$i]}" \
     --downsample 8 &
 
     # CUDA_VISIBLE_DEVICES=$gpufive python generate-navier-stokes.py \
