@@ -176,6 +176,9 @@ def main():
         _, spectral_trajectory = trajectory_fn(vorticity_hat0)
         # Not a necessary step. We could store in a spectral representation but,
         # they consume the same amount of space so we preprocess.
+
+        # Remove burn in frames so we don't have to repeat downsampling
+        spectral_trajectory = spectral_trajectory[num_burn_in_frames:]
         if downsample > 0:
             spectral_trajectory = downsample_fn(spectral_trajectory)
 
@@ -212,7 +215,7 @@ def main():
             continue
         batch_trajectories = generate_solution(batch_rngs)
         # Remove burn in frames - Batch x Time x X x Y
-        batch_trajectories = batch_trajectories[:, num_burn_in_frames:]
+        # batch_trajectories = batch_trajectories[:, :]
         jnp.save(
             os.path.join(output_dir, f"batch_{batch_number}.npy"), batch_trajectories
         )
