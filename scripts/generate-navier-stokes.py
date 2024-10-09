@@ -202,6 +202,11 @@ def main():
     for batch_number in tqdm(range(num_batches)):
         batch_key = jax.random.fold_in(rng_key, batch_number)
         batch_rngs = jax.random.split(batch_key, batch_size)
+        # Quick check to see if the file already exists
+        # If it does, we ignore it
+        # This is so we can resubmit jobs to NERSC without having to manually remove the generated parameters
+        if os.path.exists(os.path.join(output_dir, f"batch_{batch_number}.npy")):
+            continue
         batch_trajectories = generate_solution(batch_rngs)
         # Remove burn in frames - Batch x Time x X x Y
         batch_trajectories = batch_trajectories[:, num_burn_in_frames:]
