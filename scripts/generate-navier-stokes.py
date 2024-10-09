@@ -160,14 +160,14 @@ def main():
     @jax.vmap
     def downsample_fn(trajectory):
         vel_sp = spectral.utils.vorticity_to_velocity(grid)(trajectory)
-        vel_real = [jnp.fft.irfftn(v, axes=(1, 2)) for v in vel_sp]
+        vel_real = [jnp.fft.irfftn(v, axes=(0, 1)) for v in vel_sp]
         dst_grid = grids.Grid(
             (resolution // downsample, resolution // downsample),
             domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi)),
         )
         small_traj = cfd.resize.downsample_staggered_velocity(grid, dst_grid, vel_real)
         kx, ky = dst_grid.rfft_mesh()
-        small_traj = [jnp.fft.rfftn(v, axes=(1, 2)) for v in small_traj]
+        small_traj = [jnp.fft.rfftn(v, axes=(0, 1)) for v in small_traj]
         small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
         return small_traj
 
