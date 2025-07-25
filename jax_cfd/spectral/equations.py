@@ -151,12 +151,60 @@ class NavierStokes2D(time_stepping.ImplicitExplicitODE):
     smooth: bool = True
     forcing_fn: Optional[Callable[[grids.Grid], forcings.ForcingFn]] = None
     _forcing_fn_with_grid = None
-    output_dir = f"/data/divyam123/meta-cfd/jaxcfd_fields/2dtf_{self.viscosity}_{self.grid.shape}"
-    counter = 0
+    counter: int = dataclasses.field(default=0)  # Instance variable
 
-    def save_field(self, field, name):
-        os.makedirs(self.output_dir, exist_ok=True)
-        np.save(os.path.join(self.output_dir, f"{name}.npy"), field)
+    def save_fields(self, fields_dict):
+        """Save a field using jax.debug.callback to avoid JAX transformation issues."""
+        def _save(fields_dict, step_num):
+            advection = fields_dict["advection"]
+            shape = advection.shape[-1]
+            if self.forcing_fn is not None:
+                output_dir = f"/data/divyam123/meta-cfd/jaxcfd_fields/2dtf_{self.viscosity}_{shape}"
+            else:
+                output_dir = f"/data/divyam123/meta-cfd/jaxcfd_fields/2dns_{self.viscosity}_{shape}"
+            os.makedirs(output_dir, exist_ok=True)
+            total_files = len(os.listdir(output_dir))
+            if step_num == 0:
+                total_files = total_files + 1
+            save_path = os.path.join(output_dir, f"index_{total_files}")
+            os.makedirs(save_path, exist_ok=True)
+            for name_str, field_array in fields_dict.items():
+                field_np = np.array(field_array)
+                np.save(os.path.join(
+                    save_path, f"{name_str}_{step_num}.npy"), field_np)
+            # print(f"Saved {name_str}_{step_num} to {save_path}")
+
+        # Use a static counter that gets passed as an argument
+        jax.debug.callback(_save, fields_dict, self.counter)
+
+    def increment_counter(self):
+        """Increment the counter outside of JAX transformations."""
+        self.counter += 1
+
+    def save_timestep_data(self, vorticity_hat):
+        """Save all field data after a complete timestep."""
+        velocity_solve = spectral_utils.vorticity_to_velocity(self.grid)
+        vxhat, vyhat = velocity_solve(vorticity_hat)
+        vx, vy = jnp.fft.irfftn(vxhat), jnp.fft.irfftn(vyhat)
+
+        grad_x_hat = 2j * jnp.pi * self.kx * vorticity_hat
+        grad_y_hat = 2j * jnp.pi * self.ky * vorticity_hat
+        grad_x, grad_y = jnp.fft.irfftn(grad_x_hat), jnp.fft.irfftn(grad_y_hat)
+
+        advection = -(grad_x * vx + grad_y * vy)
+        diffusion_term = jnp.fft.irfftn(
+            self.viscosity * self.laplace * vorticity_hat)
+        damping_term = jnp.fft.irfftn(self.drag * vorticity_hat)
+
+        self.save_fields(fields_dict={
+            "vorticity": jnp.fft.irfftn(vorticity_hat),
+            "vx": vx,
+            "vy": vy,
+            "advection": advection,
+            "w_dx": grad_x,
+            "w_dy": grad_y,
+            "diffusion_term": diffusion_term,
+            "damping_term": damping_term})
 
     def __post_init__(self):
         self.kx, self.ky = self.grid.rfft_mesh()
@@ -191,29 +239,24 @@ class NavierStokes2D(time_stepping.ImplicitExplicitODE):
             fx_hat, fy_hat = jnp.fft.rfft2(fx.data), jnp.fft.rfft2(fy.data)
             terms += spectral_utils.spectral_curl_2d((self.kx, self.ky),
                                                      (fx_hat, fy_hat))
-        jax.debug.callback(lambda: self.save_field(
-            terms, f"terms_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(vx, f"vx_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(vy, f"vy_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            grad_x, f"grad_x_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            grad_y, f"grad_y_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            advection, f"advection_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            advection_hat, f"advection_hat_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            self.linear_term, f"linear_term_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            self.filter_, f"filter_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            self.forcing_fn, f"forcing_fn_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            self.forcing_fn_with_grid, f"forcing_fn_with_grid_{self.counter}"))
-        jax.debug.callback(lambda: self.save_field(
-            self.grid, f"grid_{self.counter}"))
-        self.counter += 1
+        # Save key fields using debug callbacks
+        # terms = jax.block_until_ready(terms)
+        # self.viscosity * self.laplace - self.drag
+        diffusion_term = jnp.fft.irfftn(
+            self.viscosity * self.laplace * vorticity_hat)
+        damping_term = jnp.fft.irfftn(self.drag * vorticity_hat)
+
+        # self.save_fields(fields_dict={
+        #     "vorticity": jnp.fft.irfftn(vorticity_hat),
+        #     "vx": vx,
+        #     "vy": vy,
+        #     "advection": advection,
+        #     "w_dx": grad_x,
+        #     "w_dy": grad_y,
+        #     "diffusion_term": diffusion_term,
+        #     "damping_term": damping_term})
+        # self.increment_counter()
+
         return terms
 
     def implicit_terms(self, vorticity_hat):
