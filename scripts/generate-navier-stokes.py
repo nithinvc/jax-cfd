@@ -117,7 +117,7 @@ def main():
     logger.info(f"Anti-aliasing: {smooth}")
     logger.info(f"Drag: {drag}")
 
-    save_dt = args.save_dt  # stable_dt
+    save_dt = args.save_dt  # stable_dt # temporary change
     burn_in_time = args.burn_in
     simulation_time = args.simulation_time
     total_time = burn_in_time + simulation_time
