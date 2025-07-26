@@ -226,19 +226,15 @@ def main():
 
     @jax.jit
     def get_initial_condition_from_high_res(key):
-        sample_traj = generate_random_vorticity_field(
+        sample_traj_pre_sampling = generate_random_vorticity_field(
             key, max_resolution_grid, max_velocity, 4
         )
         # Add time dim
-        print(sample_traj.shape, "sample traj shape")
-        sample_traj = ic_downsample_fn(sample_traj)
-        return sample_traj
+        sample_traj = ic_downsample_fn(sample_traj_pre_sampling)
+        return sample_traj_pre_sampling, sample_traj
 
-    #key = jax.random.PRNGKey(0)
-    #sample_ic = get_initial_condition_from_high_res(key)
-
-    def generate_solution_template(key, sample_ic, trajectory_fn):
-        vorticity_hat0 = sample_ic(key)
+    def generate_solution_template(key, trajectory_fn):
+        _, vorticity_hat0 = get_initial_condition_from_high_res(key)
         _, spectral_trajectory = trajectory_fn(vorticity_hat0)
         # Not a necessary step. We could store in a spectral representation but,
         # they consume the same amount of space so we preprocess.
@@ -254,7 +250,6 @@ def main():
         jax.vmap(
             partial(
                 generate_solution_template,
-                sample_ic=sample_ic,
                 trajectory_fn=trajectory_fn,
             ),
             in_axes=0,
