@@ -53,6 +53,7 @@ def main():
         default=1.0,
         help="Time between every saved frame (approx.). This may not be exactly followed due to the required stable_dt.",
     )
+    parser.add_argument("--max_resolution", type=int, default=4096)
 
     ## Forcing Function Args
     parser.add_argument(
@@ -89,11 +90,30 @@ def main():
     logger.info(
         f"Resolution: {resolution}x{resolution}, Max Velocity: {max_velocity}, Viscosity: {viscosity}"
     )
+    logger.info(f"Max Resolution: {args.max_resolution}")
+    max_resolution: int = args.max_resolution
     grid = grids.Grid(
         (resolution, resolution), domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi))
     )
-    stable_dt = cfd.equations.stable_time_step(max_velocity, 0.5, viscosity, grid)
+
+    max_resolution_grid = grids.Grid(
+        (max_resolution, max_resolution), domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi))
+    )
+    max_resolution_stable_dt = cfd.equations.stable_time_step(
+        max_velocity, args.max_courant_number, viscosity, max_resolution_grid
+    )
+    logger.info(f"Max Resolution Stable Time Step: {max_resolution_stable_dt}")
+
+    stable_dt = cfd.equations.stable_time_step(
+        max_velocity, args.max_courant_number, viscosity, grid
+    )
     logger.info(f"Stable time step: {stable_dt}")
+
+    if max_resolution_stable_dt < stable_dt:
+        logger.warning(
+            f"Max resolution stable time step is less than the stable time step. This will cause the simulation to be unstable. Max resolution stable time step: {max_resolution_stable_dt}, Stable time step: {stable_dt}"
+        )
+        stable_dt = max_resolution_stable_dt
 
     # Setup forcing function
     forcing_func = None
@@ -156,20 +176,66 @@ def main():
     )
 
     # Function mapping rngkey -> trajectory
-
-    @jax.vmap
-    def downsample_fn(trajectory):
-        vel_sp = spectral.utils.vorticity_to_velocity(grid)(trajectory)
+    def downsample_fn_template(
+        trajectory, downsample_factor, original_grid, current_resolution
+    ):
+        vel_sp = spectral.utils.vorticity_to_velocity(original_grid)(trajectory)
         vel_real = [jnp.fft.irfftn(v, axes=(0, 1)) for v in vel_sp]
         dst_grid = grids.Grid(
-            (resolution // downsample, resolution // downsample),
+            (
+                current_resolution // downsample_factor,
+                current_resolution // downsample_factor,
+            ),
             domain=((0, 2 * jnp.pi), (0, 2 * jnp.pi)),
         )
-        small_traj = cfd.resize.downsample_staggered_velocity(grid, dst_grid, vel_real)
+        small_traj = cfd.resize.downsample_staggered_velocity(
+            original_grid, dst_grid, vel_real
+        )
         kx, ky = dst_grid.rfft_mesh()
         small_traj = [jnp.fft.rfftn(v, axes=(0, 1)) for v in small_traj]
         small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
         return small_traj
+
+    initial_condition_downsample_factor = max_resolution / resolution
+    assert initial_condition_downsample_factor % 1 == 0, (
+        "Initial condition downsample factor must be an integer"
+    )
+    logger.info(
+        f"Initial condition downsample factor: {initial_condition_downsample_factor}"
+    )
+    initial_condition_downsample_factor = int(initial_condition_downsample_factor)
+
+    downsample_fn = jax.jit(
+        jax.vmap(
+            partial(
+                downsample_fn_template,
+                downsample_factor=downsample,
+                original_grid=grid,
+                current_resolution=resolution,
+            )
+        )
+    )
+    ic_downsample_fn = jax.jit(
+        partial(
+            downsample_fn_template,
+            downsample_factor=initial_condition_downsample_factor,
+            original_grid=max_resolution_grid,
+            current_resolution=max_resolution,
+        )
+    )
+
+    @jax.jit
+    def get_initial_condition_from_high_res(key):
+        sample_traj = generate_random_vorticity_field(
+            key, max_resolution_grid, max_velocity, 4
+        )
+        # Add time dim
+        print(sample_traj.shape, "sample traj shape")
+        sample_traj = ic_downsample_fn(sample_traj)
+        return sample_traj
+
+    #key = jax.random.PRNGKey(0)
+    #sample_ic = get_initial_condition_from_high_res(key)
 
     def generate_solution_template(key, sample_ic, trajectory_fn):
         vorticity_hat0 = sample_ic(key)
