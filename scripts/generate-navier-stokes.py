@@ -205,7 +205,13 @@ def main():
     )
     initial_condition_downsample_factor = int(initial_condition_downsample_factor)
 
-    downsample_fn = jax.jit(
+    TO_JIT = False
+    if TO_JIT:
+        jit = jax.jit
+    else:
+        jit = lambda x: x
+
+    downsample_fn = jit(
         jax.vmap(
             partial(
                 downsample_fn_template,
@@ -215,7 +221,7 @@ def main():
             )
         )
     )
-    ic_downsample_fn = jax.jit(
+    ic_downsample_fn = jit(
         partial(
             downsample_fn_template,
             downsample_factor=initial_condition_downsample_factor,
@@ -224,7 +230,7 @@ def main():
         )
     )
 
-    @jax.jit
+    @jit
     def get_initial_condition_from_high_res(key):
         sample_traj_pre_sampling = generate_random_vorticity_field(
             key, max_resolution_grid, max_velocity, 4
@@ -246,7 +252,7 @@ def main():
 
         return jnp.fft.irfftn(spectral_trajectory, axes=(1, 2))
 
-    generate_solution = jax.jit(
+    generate_solution = jit(
         jax.vmap(
             partial(
                 generate_solution_template,
