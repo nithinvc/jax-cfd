@@ -9,8 +9,8 @@ numgpus=8
 format_viscosity_for_file() {
     local visc=$1
     case $visc in
-        "0.00001") echo "1e-5" ;;
-        "0.00005") echo "5e-5" ;;
+        "0.00001") echo "1e-05" ;;
+        "0.00005") echo "5e-05" ;;
         *) echo "$visc" ;;
     esac
 }
