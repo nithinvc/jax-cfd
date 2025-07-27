@@ -29,7 +29,7 @@ for resolution in "${resolutions[@]}"; do
         viscosity="${viscosities[$i]}"
         formatted_viscosity=$(format_viscosity_for_file "$viscosity")
         
-        inputfile="/mnt/local_storage/physicality/initial-conditions/ns_2048x2048_visc_${formatted_viscosity}"
+        inputfile="/mnt/local_storage/physicality/initial-conditions/ns_2048x2048_visc_${formatted_viscosity}.npy"
         
         echo "  GPU $gpu_id: resolution=$resolution, viscosity=$viscosity (file: $formatted_viscosity)"
         
