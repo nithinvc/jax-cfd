@@ -17,7 +17,7 @@ for i in "${!viscosities[@]}"; do
     
     echo "  GPU $gpu_id: viscosity=$viscosity"
     
-    CUDA_VISIBLE_DEVICES=$gpu_id python generate-navier-stokes.py \
+    CUDA_VISIBLE_DEVICES=$gpu_id python generate-initial-condition.py \
         --output_dir $datadir \
         --drag 0.1 \
         --simulation_time 1.0 \
