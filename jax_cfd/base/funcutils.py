@@ -81,6 +81,7 @@ def scan(f, init, xs, length=None):
 
 def repeated(f: Callable, steps: int) -> Callable:
   """Returns a repeatedly applied version of f()."""
+  f = jax.jit(f)
   def f_repeated(x_initial):
     g = lambda x, _: (f(x), None)
     x_final, _ = scan(g, x_initial, xs=None, length=steps)

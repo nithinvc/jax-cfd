@@ -158,7 +158,6 @@ class NavierStokes2D(time_stepping.ImplicitExplicitODE):
       self._forcing_fn_with_grid = self.forcing_fn(self.grid)
 
   def explicit_terms(self, vorticity_hat):
-    print("got into the explicit terms", type(vorticity_hat))
     velocity_solve = spectral_utils.vorticity_to_velocity(self.grid)
     vxhat, vyhat = velocity_solve(vorticity_hat)
     vx, vy = jnp.fft.irfftn(vxhat), jnp.fft.irfftn(vyhat)
@@ -185,11 +184,9 @@ class NavierStokes2D(time_stepping.ImplicitExplicitODE):
     return terms
 
   def implicit_terms(self, vorticity_hat):
-    print("got into the implicit terms")
     return self.linear_term * vorticity_hat
 
   def implicit_solve(self, vorticity_hat, time_step):
-    print("got into the implicit solve")
     return 1 / (1 - time_step * self.linear_term) * vorticity_hat
 
 
