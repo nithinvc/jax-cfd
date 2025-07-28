@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import ndimage
 
 import os
 
@@ -9,7 +10,7 @@ import json
 from collections import defaultdict
 
 import scienceplots
-
+from tqdm import tqdm
 import jax_cfd.base as cfd
 import jax_cfd.base.grids as grids
 import jax_cfd.spectral as spectral
@@ -18,7 +19,7 @@ import jax.numpy as jnp
 from functools import partial
 plt.style.use(['science'])
 
-
+# batched and across time
 @partial(jax.vmap, in_axes=(0, None, None))
 def downsample_fn_template(
     trajectory,  original_grid, dst_grid
@@ -34,6 +35,7 @@ def downsample_fn_template(
     small_traj = spectral.utils.spectral_curl_2d((kx, ky), small_traj)
     return jnp.fft.irfftn(small_traj, axes=(0, 1))
 
+@partial(jax.vmap, in_axes=(0, None))
 def downsample(field, new_resolution):
     # T, X, Y
 
@@ -56,6 +58,43 @@ def downsample(field, new_resolution):
     downsampled_field = downsample_fn_template(field, original_grid, dst_grid)
 
 
+    return downsampled_field
+
+def downsample_scipy(field, new_resolution: int):
+    """
+    Downsample field using scipy.ndimage.zoom
+    Field: Batch size x T x X x Y
+    new_resolution: int - target resolution for X and Y dimensions
+    """
+    # Get current shape
+    if field.ndim == 3:  # T x X x Y
+        current_resolution_x = field.shape[1]
+        current_resolution_y = field.shape[2]
+        
+        # Calculate zoom factors
+        zoom_x = new_resolution / current_resolution_x
+        zoom_y = new_resolution / current_resolution_y
+        
+        # Apply zoom (1.0 for time dimension, zoom factors for spatial dimensions)
+        zoom_factors = (1.0, zoom_x, zoom_y)
+        
+    elif field.ndim == 4:  # Batch x T x X x Y
+        current_resolution_x = field.shape[2]
+        current_resolution_y = field.shape[3]
+        
+        # Calculate zoom factors
+        zoom_x = new_resolution / current_resolution_x
+        zoom_y = new_resolution / current_resolution_y
+        
+        # Apply zoom (1.0 for batch and time dimensions, zoom factors for spatial dimensions)
+        zoom_factors = (1.0, 1.0, zoom_x, zoom_y)
+        
+    else:
+        raise ValueError(f"Expected 3D (T,X,Y) or 4D (Batch,T,X,Y) field, got {field.ndim}D")
+    
+    # Use scipy zoom with order=1 (bilinear interpolation) for smooth downsampling
+    downsampled_field = ndimage.zoom(field, zoom_factors, order=1)
+    
     return downsampled_field
     
 
@@ -93,13 +132,14 @@ def plot_solution_field(field, viscosity, resolution, time_indices=[0, -1], down
 
 @click.command("main")
 @click.option("--loc", type=click.Path(exists=True), required=True, help="location of all data")
-def main(loc):
+@click.option("--plot_sols", is_flag=True, help="plot solutions")
+def main(loc, plot_sols):
     print("Jax devices", jax.devices())
     generated_solutions_dirs = os.listdir(loc)
     generated_solutions_metdata = []
     generated_solutions_data = []
     missing_data = []
-    for d in generated_solutions_dirs:
+    for d in tqdm(generated_solutions_dirs, desc='Processing directories'):
         metadata_file = os.path.join(loc, d, 'args.json')
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
@@ -113,9 +153,8 @@ def main(loc):
             missing_data.append(d)
             generated_solutions_metdata.pop()
         else:
-            assert len(current_batches) == 1, 'more than one batch not supported'
-            generated_solutions_data.append(current_batches[0]) # TODO: this should be cat in the case we support multiple batches
-    
+            generated_solutions_data.append(np.concatenate(current_batches, axis=0))
+
     print(f'Folders with missing data: {missing_data}')
 
     # map viscosity -> dict: res -> array
@@ -140,12 +179,14 @@ def main(loc):
             print(f'Processing resolution: {res}, shape: {field.shape}')
             
             # Plot solution field
-            plot_solution_field(field, viscosity, res)
+            if plot_sols:
+                plot_solution_field(field, viscosity, res)
 
             downsampled_field = downsample(high_res_field, res)
-            plot_solution_field(downsampled_field, viscosity, highest_res, downsampled=True)
+            if plot_sols:
+                plot_solution_field(downsampled_field, viscosity, highest_res, downsampled=True)
             
-            error = np.linalg.norm(field - downsampled_field)
+            error = (np.linalg.norm(field - downsampled_field) / np.linalg.norm(downsampled_field)) * 100
             errors.append(error)
             res_order.append(res)
 
@@ -154,7 +195,7 @@ def main(loc):
         # plt.loglog(resolutions, errors, 'o-', linewidth=2, markersize=8)
         plt.plot(resolutions, errors, 'o-', linewidth=2, markersize=8)
         plt.xlabel('Resolution', fontsize=12)
-        plt.ylabel('Error', fontsize=12)
+        plt.ylabel('Error (\%)', fontsize=12)
         plt.title(f'Resolution vs Error (Viscosity = {viscosity})', fontsize=14)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-resolutions=(64 128 256 512 1024 2048)
+#resolutions=(64 128 256 512 1024 2048)
+resolutions=(2048)
 viscosities=("0.01" "0.005" "0.001" "0.0005" "0.0001" "0.00005" "0.00001")
 datadir="/mnt/local_storage/physicality/rollouts/"
 numgpus=8
@@ -43,7 +44,8 @@ for resolution in "${resolutions[@]}"; do
             --forcing_func kolmogorov \
             --resolution "$resolution" \
             --kolmogorov_wavenumber 2 \
-            --viscosity "$viscosity" &
+            --viscosity "$viscosity" \
+            --single_trajectory &
         
         pids+=($!)
     done

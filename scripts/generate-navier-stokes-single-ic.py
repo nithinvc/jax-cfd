@@ -67,12 +67,14 @@ def main():
     # TF args
     parser.add_argument("--transient_scale", type=float, default=0.1)
     parser.add_argument("--downsample", type=int, default=-1)
+    parser.add_argument('--single_trajectory', action='store_true', help="do a single trajectory at a time")
 
     args = parser.parse_args()
     input_file = args.input_file
     initial_condition = jnp.load(input_file)
     assert input_file is not None, "Input file is required"
     downsample = args.downsample
+    single_trajectory = args.single_trajectory
 
     # Ensure output directory exists
     output_dir = generate_output_folder_name(args)
@@ -239,13 +241,22 @@ def main():
         f"Batch Size: {batch_size}, Num Batches: {num_batches}, Seed: {seed}, Total Trajectories: {num_batches * batch_size}"
     )
     logger.info("Generating trajectories...")
+
+    if single_trajectory:
+        initial_condition = [initial_condition[i] for i in range(initial_condition.shape[0])]
+        initial_condition = [jnp.expand_dims(i, axis=0) for i in initial_condition]
+        num_batches = len(initial_condition)
+
     for batch_number in tqdm(range(num_batches)):
         batch_key = jax.random.fold_in(rng_key, batch_number)
         batch_rngs = jax.random.split(batch_key, batch_size)
         # Quick check to see if the file already exists
         # If it does, we ignore it
         # This is so we can resubmit jobs to NERSC without having to manually remove the generated parameters
-        batch_trajectories = generate_solution(initial_condition)
+        if single_trajectory:
+            batch_trajectories = generate_solution(initial_condition[batch_number])
+        else:
+            batch_trajectories = generate_solution(initial_condition)
         # Remove burn in frames - Batch x Time x X x Y
         # batch_trajectories = batch_trajectories[:, :]
         jnp.save(
