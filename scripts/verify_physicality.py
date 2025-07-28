@@ -99,11 +99,11 @@ def downsample_scipy(field, new_resolution: int):
     return downsampled_field
     
 
-def plot_solution_field(field, viscosity, resolution, time_indices=[0, -1], downsampled= False):
-    """Plot solution field snapshots and save to plots/{viscosity}/{resolution}.jpg"""
+def plot_solution_field(field, viscosity, resolution, out_dir, time_indices=[0, -1], downsampled= False):
+    """Plot solution field snapshots and save to {out_dir}/{viscosity}/{resolution}.jpg"""
     
     # Create directory structure
-    plot_dir = f"plots/{viscosity}"
+    plot_dir = os.path.join(out_dir, str(viscosity))
     os.makedirs(plot_dir, exist_ok=True)
     
     # Create subplots for different time snapshots
@@ -132,15 +132,23 @@ def plot_solution_field(field, viscosity, resolution, time_indices=[0, -1], down
 
 @click.command("main")
 @click.option("--loc", type=click.Path(exists=True), required=True, help="location of all data")
+@click.option("--out_dir", type=click.Path(), required=True, help="output directory for plots")
 @click.option("--plot_sols", is_flag=True, help="plot solutions")
-def main(loc, plot_sols):
+def main(loc, out_dir, plot_sols):
     print("Jax devices", jax.devices())
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(out_dir, exist_ok=True)
+    
     generated_solutions_dirs = os.listdir(loc)
     generated_solutions_metdata = []
     generated_solutions_data = []
     missing_data = []
     for d in tqdm(generated_solutions_dirs, desc='Processing directories'):
+        if not os.path.isdir(os.path.join(loc, d)):
+            continue
         metadata_file = os.path.join(loc, d, 'args.json')
+
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
         generated_solutions_metdata.append(metadata)
@@ -181,11 +189,11 @@ def main(loc, plot_sols):
             
             # Plot solution field
             if plot_sols:
-                plot_solution_field(field[0], viscosity, res)
+                plot_solution_field(field[0], viscosity, res, out_dir)
 
             downsampled_field = downsample_scipy(high_res_field, res)
             if plot_sols:
-                plot_solution_field(downsampled_field[0], viscosity, highest_res, downsampled=True)
+                plot_solution_field(downsampled_field[0], viscosity, highest_res, out_dir, downsampled=True)
             
             error = (np.linalg.norm(field - downsampled_field) / np.linalg.norm(downsampled_field)) * 100
             errors.append(error)
@@ -202,7 +210,7 @@ def main(loc, plot_sols):
         plt.tight_layout()
 
         # Save figure with viscosity in filename
-        fig_filename = f'error_vs_resolution_viscosity_{viscosity}.png'
+        fig_filename = os.path.join(out_dir, f'error_vs_resolution_viscosity_{viscosity}.png')
         plt.savefig(fig_filename, dpi=300, bbox_inches='tight')
         plt.close()
         print(f'Saved figure: {fig_filename}')
