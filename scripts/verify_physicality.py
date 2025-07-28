@@ -38,6 +38,7 @@ def downsample_fn_template(
 @partial(jax.vmap, in_axes=(0, None))
 def downsample(field, new_resolution):
     # T, X, Y
+    print(field.shape)
 
     original_grid = grids.Grid(
         (
@@ -111,7 +112,7 @@ def plot_solution_field(field, viscosity, resolution, time_indices=[0, -1], down
         axes = [axes]
     
     for i, t_idx in enumerate(time_indices):
-        im = axes[i].imshow(field[t_idx], cmap='RdBu_r', origin='lower')
+        im = axes[i].imshow(field[t_idx], cmap='RdBu_r', origin='lower', vmin=-8, vmax=8)
         axes[i].set_title(f't = {t_idx}')
         axes[i].set_xlabel('x')
         axes[i].set_ylabel('y')
@@ -128,7 +129,6 @@ def plot_solution_field(field, viscosity, resolution, time_indices=[0, -1], down
     plt.savefig(filename, dpi=300, bbox_inches='tight', format='jpg')
     plt.close()
     print(f'Saved solution field plot: {filename}')
-    
 
 @click.command("main")
 @click.option("--loc", type=click.Path(exists=True), required=True, help="location of all data")
@@ -145,7 +145,9 @@ def main(loc, plot_sols):
             metadata = json.load(f)
         generated_solutions_metdata.append(metadata)
         current_batches = []
-        for files in os.listdir(os.path.join(loc, d)):
+        files = os.listdir(os.path.join(loc, d))
+        files.sort()
+        for files in files:
             if files.endswith('.npy'):
                 current_batches.append(np.load(os.path.join(loc, d, files)))
 
@@ -163,28 +165,27 @@ def main(loc, plot_sols):
     for metadata, field in zip(generated_solutions_metdata, generated_solutions_data):
         data[metadata['viscosity']][metadata['resolution']] = field
 
-    batch_index = 0
     for viscosity, res_dict in data.items():
         highest_res = max(res_dict.keys())
         print(f'Processing viscosity: {viscosity}, highest resolution: {highest_res}, shape: {res_dict[highest_res].shape}')
         errors = []
-        high_res_field = res_dict[highest_res][batch_index]
+        high_res_field = res_dict[highest_res]
         resolutions = list(res_dict.keys())
         resolutions.sort()
 
         res_order = []
 
         for res in resolutions:
-            field = res_dict[res][batch_index]
+            field = res_dict[res]
             print(f'Processing resolution: {res}, shape: {field.shape}')
             
             # Plot solution field
             if plot_sols:
-                plot_solution_field(field, viscosity, res)
+                plot_solution_field(field[0], viscosity, res)
 
-            downsampled_field = downsample(high_res_field, res)
+            downsampled_field = downsample_scipy(high_res_field, res)
             if plot_sols:
-                plot_solution_field(downsampled_field, viscosity, highest_res, downsampled=True)
+                plot_solution_field(downsampled_field[0], viscosity, highest_res, downsampled=True)
             
             error = (np.linalg.norm(field - downsampled_field) / np.linalg.norm(downsampled_field)) * 100
             errors.append(error)
