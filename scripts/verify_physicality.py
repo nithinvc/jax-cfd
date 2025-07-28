@@ -132,19 +132,24 @@ def plot_solution_field(field, viscosity, resolution, out_dir, time_indices=[0, 
 
 @click.command("main")
 @click.option("--loc", type=click.Path(exists=True), required=True, help="location of all data")
-@click.option("--out_dir", type=click.Path(), required=True, help="output directory for plots")
+@click.option("--out_dir", type=click.Path(), help="output directory for plots")
 @click.option("--plot_sols", is_flag=True, help="plot solutions")
-def main(loc, out_dir, plot_sols):
+@click.option("--list_table", is_flag=True, help="print table of errors and skip plotting")
+@click.option("--dev", is_flag=True, help="use dev mode")
+def main(loc, out_dir, plot_sols, list_table, dev):
     print("Jax devices", jax.devices())
     
-    # Create output directory if it doesn't exist
-    os.makedirs(out_dir, exist_ok=True)
+    # Create output directory if it doesn't exist (only if plotting)
+    if not list_table:
+        os.makedirs(out_dir, exist_ok=True)
     
     generated_solutions_dirs = os.listdir(loc)
     generated_solutions_metdata = []
     generated_solutions_data = []
     missing_data = []
     for d in tqdm(generated_solutions_dirs, desc='Processing directories'):
+        if dev and ('2048' in d or '1024' in d):
+            continue
         if not os.path.isdir(os.path.join(loc, d)):
             continue
         metadata_file = os.path.join(loc, d, 'args.json')
@@ -173,6 +178,9 @@ def main(loc, out_dir, plot_sols):
     for metadata, field in zip(generated_solutions_metdata, generated_solutions_data):
         data[metadata['viscosity']][metadata['resolution']] = field
 
+    # Store results for table
+    table_results = {}
+
     for viscosity, res_dict in data.items():
         highest_res = max(res_dict.keys())
         print(f'Processing viscosity: {viscosity}, highest resolution: {highest_res}, shape: {res_dict[highest_res].shape}')
@@ -187,34 +195,75 @@ def main(loc, out_dir, plot_sols):
             field = res_dict[res]
             print(f'Processing resolution: {res}, shape: {field.shape}')
             
-            # Plot solution field
-            if plot_sols:
+            # Plot solution field (only if not list_table mode)
+            if plot_sols and not list_table:
                 plot_solution_field(field[0], viscosity, res, out_dir)
 
             downsampled_field = downsample_scipy(high_res_field, res)
-            if plot_sols:
+            if plot_sols and not list_table:
                 plot_solution_field(downsampled_field[0], viscosity, highest_res, out_dir, downsampled=True)
             
             error = (np.linalg.norm(field - downsampled_field) / np.linalg.norm(downsampled_field)) * 100
             errors.append(error)
             res_order.append(res)
 
+        # Store results for table
+        table_results[viscosity] = dict(zip(res_order, errors))
+
         errors = np.asarray(errors)
-        plt.figure(figsize=(10, 6))
-        # plt.loglog(resolutions, errors, 'o-', linewidth=2, markersize=8)
-        plt.plot(resolutions, errors, 'o-', linewidth=2, markersize=8)
-        plt.xlabel('Resolution', fontsize=12)
-        plt.ylabel('Error (\%)', fontsize=12)
-        plt.title(f'Resolution vs Error (Viscosity = {viscosity})', fontsize=14)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
+        
+        # Only create plots if not in list_table mode
+        if not list_table:
+            plt.figure(figsize=(10, 6))
+            # plt.loglog(resolutions, errors, 'o-', linewidth=2, markersize=8)
+            plt.plot(resolutions, errors, 'o-', linewidth=2, markersize=8)
+            plt.xlabel('Resolution', fontsize=12)
+            plt.ylabel('Error (\%)', fontsize=12)
+            plt.title(f'Resolution vs Error (Viscosity = {viscosity})', fontsize=14)
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
 
-        # Save figure with viscosity in filename
-        fig_filename = os.path.join(out_dir, f'error_vs_resolution_viscosity_{viscosity}.png')
-        plt.savefig(fig_filename, dpi=300, bbox_inches='tight')
-        plt.close()
-        print(f'Saved figure: {fig_filename}')
+            # Save figure with viscosity in filename
+            fig_filename = os.path.join(out_dir, f'error_vs_resolution_viscosity_{viscosity}.png')
+            plt.savefig(fig_filename, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f'Saved figure: {fig_filename}')
 
+    # Print table if requested
+    if list_table:
+        print("\n" + "="*80)
+        print("ERROR COMPARISON TABLE")
+        max_resolution = max([max(res_dict.keys()) for res_dict in data.values()])
+        print("(Errors compared to " + str(max_resolution) + " resolution downsampled)")
+        print("="*80)
+        
+        # Get all unique resolutions for header
+        all_resolutions = set()
+        for res_dict in table_results.values():
+            all_resolutions.update(res_dict.keys())
+        all_resolutions = sorted(list(all_resolutions))
+        
+        # Print header
+        header = f"{'Viscosity':<12}"
+        for res in all_resolutions:
+            header += f"{res:>12}"
+        print(header)
+        print("-" * len(header))
+        
+        # Print data rows
+        for viscosity in sorted(table_results.keys()):
+            row = f"{viscosity:<12.6f}"
+            for res in all_resolutions:
+                if res in table_results[viscosity]:
+                    error = table_results[viscosity][res]
+                    row += f"{error:>12.4f}"
+                else:
+                    row += f"{'--':>12}"
+            print(row)
+        
+        print("="*80)
+        print("Error values are percentages (%)")
+        print("="*80)
 
 
 if __name__ == "__main__":
