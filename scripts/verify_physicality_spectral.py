@@ -201,6 +201,33 @@ def plot_normalized_difference_field(diff_field, downsampled_field, viscosity, r
     plt.close()
     print(f'Saved normalized difference field plot: {filename}')
 
+# one for batch and one for time
+@partial(jax.vmap, in_axes=(0, None))
+@partial(jax.vmap, in_axes=(0, None))
+def spectral_project(u_ref, N):
+    """
+    Project 2048² reference field onto an N×N grid by zero-padding in Fourier space
+    and inverse FFT back to real space.
+    """
+    N_ref = u_ref.shape[0]
+    # forward FFT (real→complex), shift zero-freq to centre
+    U_hat = np.fft.fftshift(np.fft.fft2(u_ref))
+    
+    # index range that survives on the coarse grid
+    k = N//2                     # positive wavenumbers to keep
+    ctr = N_ref//2               # centre index in 2048 spectrum
+    keep = slice(ctr-k, ctr+k)   # low-k band
+
+    # zero-pad everything else
+    U_coarse = np.zeros_like(U_hat)
+    U_coarse[keep, keep] = U_hat[keep, keep]
+
+    # back to physical space and take the real part
+    u_proj = np.fft.ifft2(np.fft.ifftshift(U_coarse)).real
+    # finally down-sample to N×N by striding
+    stride = N_ref // N
+    return u_proj[::stride, ::stride]
+
 @click.command("main")
 @click.option("--loc", type=click.Path(exists=True), required=True, help="location of all data")
 @click.option("--out_dir", type=click.Path(), help="output directory for plots")
