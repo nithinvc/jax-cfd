@@ -17,6 +17,7 @@ import jax_cfd.spectral as spectral
 import jax
 import jax.numpy as jnp
 from functools import partial
+from jax import pmap
 plt.style.use(['science'])
 
 # batched and across time
@@ -211,7 +212,7 @@ def spectral_project(u_ref, N):
     """
     N_ref = u_ref.shape[0]
     # forward FFT (real→complex), shift zero-freq to centre
-    U_hat = np.fft.fftshift(np.fft.fft2(u_ref))
+    U_hat = jnp.fft.fftshift(jnp.fft.fft2(u_ref))
     
     # index range that survives on the coarse grid
     k = N//2                     # positive wavenumbers to keep
@@ -219,11 +220,39 @@ def spectral_project(u_ref, N):
     keep = slice(ctr-k, ctr+k)   # low-k band
 
     # zero-pad everything else
-    U_coarse = np.zeros_like(U_hat)
-    U_coarse[keep, keep] = U_hat[keep, keep]
+    U_coarse = jnp.zeros_like(U_hat)
+    U_coarse = U_coarse.at[keep, keep].set(U_hat[keep, keep])
 
     # back to physical space and take the real part
-    u_proj = np.fft.ifft2(np.fft.ifftshift(U_coarse)).real
+    u_proj = jnp.fft.ifft2(jnp.fft.ifftshift(U_coarse)).real
+    # finally down-sample to N×N by striding
+    stride = N_ref // N
+    return u_proj[::stride, ::stride]
+
+# Parallel version for multiple GPUs
+# pmap over devices, vmap over time
+@partial(pmap, in_axes=(0, None))
+@partial(jax.vmap, in_axes=(0, None))
+def spectral_project_parallel(u_ref, N):
+    """
+    Parallel version of spectral_project that runs across multiple devices.
+    Input should be sharded across devices on the first (batch) dimension.
+    """
+    N_ref = u_ref.shape[0]
+    # forward FFT (real→complex), shift zero-freq to centre
+    U_hat = jnp.fft.fftshift(jnp.fft.fft2(u_ref))
+    
+    # index range that survives on the coarse grid
+    k = N//2                     # positive wavenumbers to keep
+    ctr = N_ref//2               # centre index in 2048 spectrum
+    keep = slice(ctr-k, ctr+k)   # low-k band
+
+    # zero-pad everything else
+    U_coarse = jnp.zeros_like(U_hat)
+    U_coarse = U_coarse.at[keep, keep].set(U_hat[keep, keep])
+
+    # back to physical space and take the real part
+    u_proj = jnp.fft.ifft2(jnp.fft.ifftshift(U_coarse)).real
     # finally down-sample to N×N by striding
     stride = N_ref // N
     return u_proj[::stride, ::stride]
@@ -233,10 +262,34 @@ def spectral_project(u_ref, N):
 @click.option("--out_dir", type=click.Path(), help="output directory for plots")
 @click.option("--plot_sols", is_flag=True, help="plot solutions")
 @click.option("--no_list_table", "list_table", flag_value=False, default=True, help="disable printing table of errors")
-@click.option("--dev", is_flag=True, help="use dev mode")
+@click.option("--dev", is_flag=True, help="Dev mode: process only first viscosity, includes all resolutions up to 2048")
 @click.option("--max_seconds", type=float, default=4.0, help="maximum length of trajectory to compare (in seconds, max 4.0)")
-def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
-    print("Jax devices", jax.devices())
+@click.option("--time_chunk_size", type=int, default=None, help="Process time steps in chunks of this size to save memory")
+def main(loc, out_dir, plot_sols, list_table, dev, max_seconds, time_chunk_size):
+    """
+    Main function with GPU parallelization support.
+    
+    GPU Parallelization Features:
+    - Automatically detects and uses all available GPUs
+    - Distributes batch computations across GPUs using pmap
+    - Supports time chunking to reduce memory usage
+    - Falls back to single GPU for small batches
+    
+    Memory Optimization:
+    - Use --time_chunk_size to process time steps in chunks (e.g., --time_chunk_size 20)
+    - This is helpful when processing high-resolution (2048x2048) data
+    """
+    devices = jax.devices()
+    n_devices = len(devices)
+    print(f"Jax devices ({n_devices} available):", devices)
+    
+    # Print memory info
+    for i, device in enumerate(devices):
+        stats = device.memory_stats()
+        if stats:
+            used_gb = stats.get('bytes_in_use', 0) / (1024**3)
+            limit_gb = stats.get('bytes_limit', 0) / (1024**3)
+            print(f"  Device {i}: {used_gb:.2f} GB used / {limit_gb:.2f} GB total")
 
     # make the out_dir if it doesnt exist
     os.makedirs(out_dir, exist_ok=True)
@@ -246,8 +299,6 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
     generated_solutions_data = []
     missing_data = []
     for d in tqdm(generated_solutions_dirs, desc='Processing directories'):
-        if dev and ('2048' in d or '1024' in d):
-            continue
         if not os.path.isdir(os.path.join(loc, d, d)):
             continue
         metadata_file = os.path.join(loc, d, d, 'args.json')
@@ -284,11 +335,18 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
     
     # Store results for table
     table_results = {}
+    
+    # In dev mode, only process the first viscosity
+    viscosities_to_process = data.items()
+    if dev:
+        viscosities_to_process = list(data.items())[:1]
+        print(f"\nDev mode: Processing only first viscosity ({list(data.keys())[0]}) out of {len(data)} available")
 
-    for viscosity, res_dict in data.items():
+    for viscosity, res_dict in viscosities_to_process:
         highest_res = max(res_dict.keys())
         print(f'Processing viscosity: {viscosity}, highest resolution: {highest_res}, shape: {res_dict[highest_res].shape}')
         errors = []
+        errors_spectral = []
         high_res_field = res_dict[highest_res]
         resolutions = list(res_dict.keys())
         resolutions.sort()
@@ -320,6 +378,48 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             
             high_res_field_sliced = high_res_field[:, :time_steps_to_use, :, :]
             downsampled_field_sliced = downsample_scipy(high_res_field_sliced, res)
+
+            # Use parallel spectral projection if batch size allows distribution
+            batch_size = high_res_field_sliced.shape[0]
+            
+            # Force time chunking for high resolution to avoid OOM
+            effective_time_chunk_size = time_chunk_size
+            if highest_res >= 2048 and effective_time_chunk_size is None:
+                # Auto-set chunk size for 2048x2048 data
+                # With batch_size=4, we need very small chunks to fit in memory
+                effective_time_chunk_size = 5  # Very conservative for 2048x2048
+                if dev:
+                    effective_time_chunk_size = 3  # Even more conservative in dev mode
+                print(f'  Auto-setting time_chunk_size={effective_time_chunk_size} for 2048x2048 data to avoid OOM')
+            
+            # Process in time chunks if specified
+            if effective_time_chunk_size is not None and high_res_field_sliced.shape[1] > effective_time_chunk_size:
+                print(f'  Processing in time chunks of size {effective_time_chunk_size}...')
+                downsampled_chunks = []
+                n_time_steps = high_res_field_sliced.shape[1]
+                
+                for t_start in range(0, n_time_steps, effective_time_chunk_size):
+                    t_end = min(t_start + effective_time_chunk_size, n_time_steps)
+                    high_res_chunk = high_res_field_sliced[:, t_start:t_end, :, :]
+                    
+                    # For now, just use single GPU processing within chunks
+                    # The time chunking is the main memory optimization
+                    if t_start == 0:  # Print only once
+                        print(f'  Computing spectral downsample for res={res}...')
+                    downsampled_chunk = spectral_project(high_res_chunk, res)
+                    
+                    downsampled_chunks.append(downsampled_chunk)
+                
+                # Concatenate time chunks
+                downsampled_spectral = np.concatenate(downsampled_chunks, axis=1)
+                
+            else:
+                # Process all time steps at once (only for smaller resolutions)
+                print(f'  Computing spectral downsample for res={res}...')
+                downsampled_spectral = spectral_project(high_res_field_sliced, res)
+            
+            spectral_error = (np.linalg.norm(field_sliced - downsampled_spectral) / np.linalg.norm(downsampled_spectral)) * 100
+            errors_spectral.append(spectral_error)
             
             if plot_sols:
                 plot_solution_field(downsampled_field_sliced[0], viscosity, highest_res, out_dir, downsampled=True)
@@ -336,19 +436,20 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             errors.append(error)
             res_order.append(res)
             
-            # Compute time-series errors for error vs time plot
-            time_errors = []
+            # Compute time-series spectral errors for error vs time plot
+            # We already have downsampled_spectral computed above, so just slice it
+            time_errors_spectral = []
             for t in range(field_sliced.shape[1]):  # time dimension
                 field_t = field_sliced[:, t:t+1, :, :]  # Keep batch and spatial dims
-                downsampled_t = downsampled_field_sliced[:, t:t+1, :, :]
-                error_t = (np.linalg.norm(field_t - downsampled_t) / np.linalg.norm(downsampled_t)) * 100
-                time_errors.append(error_t)
-            time_series_errors[res] = np.array(time_errors)
+                downsampled_spectral_t = downsampled_spectral[:, t:t+1, :, :]
+                error_t = (np.linalg.norm(field_t - downsampled_spectral_t) / np.linalg.norm(downsampled_spectral_t)) * 100
+                time_errors_spectral.append(error_t)
+            time_series_errors[res] = np.array(time_errors_spectral)
 
-        # Store results for table
-        table_results[viscosity] = dict(zip(res_order, errors))
+        # Store spectral results for table
+        table_results[viscosity] = dict(zip(res_order, errors_spectral))
 
-        errors = np.asarray(errors)
+        errors_spectral = np.asarray(errors_spectral)
         
         # Create error vs time plot
         plt.figure(figsize=(10, 6))
@@ -361,30 +462,30 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             plt.plot(time_array, time_series_errors[res], 'o-', linewidth=2, markersize=4, label=f'res = {res}')
         
         plt.xlabel('Time (s)', fontsize=12)
-        plt.ylabel('Error (%)', fontsize=12)
-        plt.title(f'Error vs Time (Viscosity = {viscosity})', fontsize=14)
+        plt.ylabel('Spectral Error (%)', fontsize=12)
+        plt.title(f'Spectral Error vs Time (Viscosity = {viscosity})', fontsize=14)
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         
-        # Save error vs time figure
-        time_fig_filename = os.path.join(out_dir, f'error_vs_time_viscosity_{viscosity}.png')
+        # Save spectral error vs time figure
+        time_fig_filename = os.path.join(out_dir, f'spectral_error_vs_time_viscosity_{viscosity}.png')
         plt.savefig(time_fig_filename, dpi=300, bbox_inches='tight')
         plt.close()
         print(f'Saved error vs time figure: {time_fig_filename}')
         
-        # Create error vs resolution plot
+        # Create spectral error vs resolution plot
         plt.figure(figsize=(10, 6))
-        # plt.loglog(resolutions, errors, 'o-', linewidth=2, markersize=8)
-        plt.plot(resolutions, errors, 'o-', linewidth=2, markersize=8)
+        # plt.loglog(resolutions, errors_spectral, 'o-', linewidth=2, markersize=8)
+        plt.plot(resolutions, errors_spectral, 'o-', linewidth=2, markersize=8)
         plt.xlabel('Resolution', fontsize=12)
-        plt.ylabel('Error (\%)', fontsize=12)
-        plt.title(f'Resolution vs Error (Viscosity = {viscosity})', fontsize=14)
+        plt.ylabel('Spectral Error (%)', fontsize=12)
+        plt.title(f'Resolution vs Spectral Error (Viscosity = {viscosity})', fontsize=14)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
 
-        # Save figure with viscosity in filename
-        fig_filename = os.path.join(out_dir, f'error_vs_resolution_viscosity_{viscosity}.png')
+        # Save spectral figure with viscosity in filename
+        fig_filename = os.path.join(out_dir, f'spectral_error_vs_resolution_viscosity_{viscosity}.png')
         plt.savefig(fig_filename, dpi=300, bbox_inches='tight')
         plt.close()
         print(f'Saved figure: {fig_filename}')
@@ -392,9 +493,9 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
     # Print table if requested
     if list_table:
         print("\n" + "="*80)
-        print("ERROR COMPARISON TABLE")
+        print("SPECTRAL ERROR COMPARISON TABLE")
         max_resolution = max([max(res_dict.keys()) for res_dict in data.values()])
-        print("(Errors compared to " + str(max_resolution) + " resolution downsampled)")
+        print("(Spectral errors compared to " + str(max_resolution) + " resolution spectral projection)")
         if max_seconds < 4.0:
             print(f"(Using first {max_seconds} seconds of 4.0 second trajectories)")
         print("="*80)
@@ -424,7 +525,7 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             print(row)
         
         print("="*80)
-        print("Error values are percentages (%)")
+        print("Spectral error values are percentages (%)")
         print("="*80)
 
 

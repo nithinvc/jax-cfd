@@ -334,7 +334,7 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             plt.plot(time_array, time_series_errors[res], 'o-', linewidth=2, markersize=4, label=f'res = {res}')
         
         plt.xlabel('Time (s)', fontsize=12)
-        plt.ylabel('Error (%)', fontsize=12)
+        plt.ylabel('Error (\%)', fontsize=12)
         plt.title(f'Error vs Time (Viscosity = {viscosity})', fontsize=14)
         plt.legend()
         plt.grid(True, alpha=0.3)
@@ -397,7 +397,7 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds):
             print(row)
         
         print("="*80)
-        print("Error values are percentages (%)")
+        print("Error values are percentages (\%)")
         print("="*80)
 
 
