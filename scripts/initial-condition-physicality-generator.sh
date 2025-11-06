@@ -1,10 +1,10 @@
 #!/bin/bash
 
-datadir="/mnt/local_storage/physicality/initial-conditions/"
+datadir="/mnt/cluster_storage/fluids/initial-conditions-4096/"
 batchsize=4
 viscosities=("0.01" "0.005" "0.001" "0.0005" "0.0001" "0.00005" "0.00001")
 num_gpus=7
-resolution=2048
+resolution=4096
 
 echo "Total viscosities: ${#viscosities[@]}"
 echo "Starting parallel jobs across GPUs 1-7..."

@@ -87,7 +87,8 @@ def spectral_project_batch(field, N):
 @click.option("--dev", is_flag=True, help="Dev mode: process only first viscosity, includes all resolutions up to 2048")
 @click.option("--viscosity", type=float, default=None, help="Specific viscosity to process. If not provided, processes all viscosities.")
 @click.option("--downsample", is_flag=True, help="Downsample all fields to 256x256 resolution (fields smaller than 256 are left untouched)")
-def main(loc, out_dir, dev, viscosity, downsample):
+@click.option("--data_only", is_flag=True, help="Save energy spectrums data only (no plot)")
+def main(loc, out_dir, dev, viscosity, downsample, data_only):
     print("Jax devices", jax.devices())
 
 
@@ -165,58 +166,75 @@ def main(loc, out_dir, dev, viscosity, downsample):
         # each spectrum is of shape K_max
         spectrums[res] = curr_spectrum
 
-    # Plot all spectrums on the same figure
-    plt.figure(figsize=(10, 6))
-    
-    # Sort resolutions for consistent plotting order
-    sorted_resolutions = sorted(spectrums.keys())
-    
-    # Plot energy spectra for each resolution
-    for res in sorted_resolutions:
-        spectrum = spectrums[res]
-        k_values = np.arange(1, len(spectrum) + 1)  # k starts from 1
-        plt.loglog(k_values, spectrum, label=f'Resolution {res}', linewidth=2)
-    
-    # Add -5/3 power law reference line
-    # Use the highest resolution spectrum as reference for scaling
-    highest_res = max(sorted_resolutions)
-    ref_spectrum = spectrums[highest_res]
-    k_ref = np.arange(1, len(ref_spectrum) + 1)
-    
-    # Find a good scaling factor by matching at k=10 (or another suitable k in the inertial range)
-    k_match = min(10, len(ref_spectrum) // 3)  # Use k=10 or 1/3 of max k
-    scaling_factor = ref_spectrum[k_match - 1] * (k_match ** (5/3))
-    
-    # Create -5/3 power law line
-    k_theory = np.logspace(0, np.log10(len(ref_spectrum)), 100)
-    power_law = scaling_factor * k_theory ** (-5/3)
-    
-    # Plot the -5/3 line
-    plt.loglog(k_theory, power_law, 'k--', alpha=0.7, linewidth=2, label=r'$k^{-5/3}$ (Kolmogorov)')
-    
-    plt.xlabel('Wavenumber k', fontsize=12)
-    plt.ylabel('Energy Spectrum E(k)', fontsize=12)
-    
-    # Update title to indicate downsampling if applied
-    title = f'Energy Spectra Comparison (Viscosity = {viscosity})'
+    # Construct output filename
+    output_filename = f'energy_spectra_viscosity_{viscosity}'
     if downsample:
-        title += ' - Downsampled to 256x256'
-    plt.title(title, fontsize=14)
+        output_filename += '_downsampled_256'
     
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    
-    # Save the plot to the output directory
-    plot_filename = f'energy_spectra_viscosity_{viscosity}'
-    if downsample:
-        plot_filename += '_downsampled_256'
-    plot_filename += '.png'
-    plot_path = os.path.join(out_dir, plot_filename)
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    print(f'Energy spectrum plot saved to: {plot_path}')
+    if data_only:
+        # Save the spectrums dictionary as a numpy file
+        # Convert JAX arrays to numpy arrays for saving
+        spectrums_np = {res: np.array(spectrum) for res, spectrum in spectrums.items()}
+        
+        data_filename = output_filename + '_data.npz'
+        data_path = os.path.join(out_dir, data_filename)
+        
+        # Save as compressed numpy archive
+        np.savez_compressed(data_path, **{str(res): spectrum for res, spectrum in spectrums_np.items()})
+        
+        print(f'Energy spectrum data saved to: {data_path}')
+        print(f'Keys in saved data: {list(spectrums.keys())}')
+        
+    else:
+        # Plot all spectrums on the same figure
+        plt.figure(figsize=(10, 6))
+        
+        # Sort resolutions for consistent plotting order
+        sorted_resolutions = sorted(spectrums.keys())
+        
+        # Plot energy spectra for each resolution
+        for res in sorted_resolutions:
+            spectrum = spectrums[res]
+            k_values = np.arange(1, len(spectrum) + 1)  # k starts from 1
+            plt.loglog(k_values, spectrum, label=f'Resolution {res}', linewidth=2)
+        
+        # Add -5/3 power law reference line
+        # Use the highest resolution spectrum as reference for scaling
+        highest_res = max(sorted_resolutions)
+        ref_spectrum = spectrums[highest_res]
+        k_ref = np.arange(1, len(ref_spectrum) + 1)
+        
+        # Find a good scaling factor by matching at k=10 (or another suitable k in the inertial range)
+        k_match = min(10, len(ref_spectrum) // 3)  # Use k=10 or 1/3 of max k
+        scaling_factor = ref_spectrum[k_match - 1] * (k_match ** (5/3))
+        
+        # Create -5/3 power law line
+        k_theory = np.logspace(0, np.log10(len(ref_spectrum)), 100)
+        power_law = scaling_factor * k_theory ** (-5/3)
+        
+        # Plot the -5/3 line
+        plt.loglog(k_theory, power_law, 'k--', alpha=0.7, linewidth=2, label=r'$k^{-5/3}$ (Kolmogorov)')
+        
+        plt.xlabel('Wavenumber k', fontsize=12)
+        plt.ylabel('Energy Spectrum E(k)', fontsize=12)
+        
+        # Update title to indicate downsampling if applied
+        title = f'Energy Spectra Comparison (Viscosity = {viscosity})'
+        if downsample:
+            title += ' - Downsampled to 256x256'
+        plt.title(title, fontsize=14)
+        
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        
+        # Save the plot to the output directory
+        plot_filename = output_filename + '.png'
+        plot_path = os.path.join(out_dir, plot_filename)
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f'Energy spectrum plot saved to: {plot_path}')
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 #!/bin/bash
 
-#resolutions=(64 128 256 512 1024 2048)
-resolutions=(2048)
+#resolutions=(64 128 256 512 1024 2048 4096)
+resolutions=(4096)
+# resolutions=(2048)
 viscosities=("0.01" "0.005" "0.001" "0.0005" "0.0001" "0.00005" "0.00001")
-datadir="/mnt/local_storage/physicality/rollouts/"
+datadir="/mnt/cluster_storage/fluids/rollouts-4096/"
 numgpus=8
 
 # Function to format viscosity for input file path
@@ -30,9 +31,15 @@ for resolution in "${resolutions[@]}"; do
         viscosity="${viscosities[$i]}"
         formatted_viscosity=$(format_viscosity_for_file "$viscosity")
         
-        inputfile="/mnt/local_storage/physicality/initial-conditions/ns_2048x2048_visc_${formatted_viscosity}.npy"
+        inputfile="/mnt/cluster_storage/fluids/initial-conditions-4096/ns_4096x4096_visc_${formatted_viscosity}.npy"
         
         echo "  GPU $gpu_id: resolution=$resolution, viscosity=$viscosity (file: $formatted_viscosity)"
+        
+        # Add --single_trajectory flag for high resolutions
+        single_trajectory_flag=""
+        if [[ "$resolution" == "2048" || "$resolution" == "4096" ]]; then
+            single_trajectory_flag="--single_trajectory"
+        fi
         
         CUDA_VISIBLE_DEVICES=$gpu_id python generate-navier-stokes-single-ic.py \
             --output_dir "$datadir" \
@@ -45,7 +52,7 @@ for resolution in "${resolutions[@]}"; do
             --resolution "$resolution" \
             --kolmogorov_wavenumber 2 \
             --viscosity "$viscosity" \
-            --single_trajectory &
+            $single_trajectory_flag &
         
         pids+=($!)
     done

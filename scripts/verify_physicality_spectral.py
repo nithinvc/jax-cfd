@@ -305,6 +305,10 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds, time_chunk_size)
 
         with open(metadata_file, 'r') as f:
             metadata = json.load(f)
+
+        if metadata['viscosity'] != 1e-2 and metadata['viscosity'] != 1e-5:
+            continue
+
         generated_solutions_metdata.append(metadata)
         current_batches = []
         files = os.listdir(os.path.join(loc, d, d))
@@ -445,6 +449,11 @@ def main(loc, out_dir, plot_sols, list_table, dev, max_seconds, time_chunk_size)
                 error_t = (np.linalg.norm(field_t - downsampled_spectral_t) / np.linalg.norm(downsampled_spectral_t)) * 100
                 time_errors_spectral.append(error_t)
             time_series_errors[res] = np.array(time_errors_spectral)
+
+        # save time_series_errors
+        import pickle as pkl
+        with open(os.path.join(out_dir, f'time_series_errors_viscosity_{viscosity}.pkl'), 'wb') as f:
+            pkl.dump(time_series_errors, f)
 
         # Store spectral results for table
         table_results[viscosity] = dict(zip(res_order, errors_spectral))

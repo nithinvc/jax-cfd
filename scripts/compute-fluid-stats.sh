@@ -6,7 +6,7 @@ numgpus=8
 
 # Input and output directories
 input_dir="/mnt/local_storage/fluids/rollouts/"
-output_base_dir="./fluid-stats-downsampled"
+output_base_dir="./fluid-stats"
 
 # Function to format viscosity for output directory
 format_viscosity_for_dir() {
@@ -44,7 +44,7 @@ for i in "${!viscosities[@]}"; do
     CUDA_VISIBLE_DEVICES=$gpu_id python fluids_stats.py \
         --loc "$input_dir" \
         --out_dir "$output_dir" \
-        --downsample \
+        --data_only \
         --viscosity "$viscosity" &
     
     pids+=($!)

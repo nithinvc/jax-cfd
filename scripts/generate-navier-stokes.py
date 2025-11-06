@@ -155,6 +155,13 @@ def main():
     outer_steps = total_time // save_dt
     inner_steps = (total_time // stable_dt) // outer_steps
     num_burn_in_frames = int(burn_in_time // save_dt)
+
+    # Modify so that we save every single step without burn in
+    logger.info("Running so there is no burn in and saving the full output")
+    total_steps = int(total_time // stable_dt)
+    inner_steps = 1
+    outer_steps = total_steps
+    num_burn_in_frames = 0
     logger.info(f"Simulation Time: {simulation_time}, Burn-in Time: {burn_in_time}")
     logger.info(
         f"Number of Burn-in Frames: {num_burn_in_frames}, Real burn in time: {num_burn_in_frames * save_dt}"
@@ -246,7 +253,8 @@ def main():
         # they consume the same amount of space so we preprocess.
 
         # Remove burn in frames so we don't have to repeat downsampling
-        spectral_trajectory = spectral_trajectory[num_burn_in_frames:]
+        if num_burn_in_frames > 0:
+            spectral_trajectory = spectral_trajectory[num_burn_in_frames:]
         if downsample > 0:
             spectral_trajectory = downsample_fn(spectral_trajectory)
 

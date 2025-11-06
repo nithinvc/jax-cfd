@@ -208,11 +208,16 @@ def main():
         )
     )
 
+    should_downsample = original_resolution != resolution
+
     def generate_solution_template(ic, trajectory_fn):
         ic = ic[0]
         assert ic.ndim == 2, "Initial condition must be 2D"
         ic = jnp.fft.rfftn(ic)
-        vorticity_hat0 = ic_downsample_fn(ic)
+        if should_downsample:
+            vorticity_hat0 = ic_downsample_fn(ic)
+        else:
+            vorticity_hat0 = ic
 
         print('vorticity_hat0.shape', vorticity_hat0.shape)
         _, spectral_trajectory = trajectory_fn(vorticity_hat0)
