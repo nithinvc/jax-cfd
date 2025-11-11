@@ -120,6 +120,39 @@ def energy_spectrum_from_vorticity(vorticity, k_max=None):
     
     return E
 
+@partial(jit, static_argnames=['k_max', 'batch_size'])
+def energy_spectrum_from_vorticity_lax_map(vorticity, k_max=None, batch_size=16):
+    """
+    Compute energy spectrum from vorticity field using jax.lax.map.
+    
+    Parameters:
+    -----------
+    vorticity : array, shape (T, X, Y)
+        Vorticity field over time
+    k_max : int, optional
+        Maximum wavenumber. If None, uses N//3 (2/3 dealiasing rule)
+    batch_size : int, optional
+        Batch size for lax.map. Default is 16.
+    
+    Returns:
+    --------
+    E : array, shape (T, k_max+1)
+        Energy spectrum for each time step
+    """
+    N = vorticity.shape[1]
+    
+    if k_max is None:
+        k_max = N // 3
+    
+    def process_timestep(vort_t):
+        u_x, u_y = vorticity_to_velocity(vort_t)
+        return energy_spectrum_single(u_x, u_y, k_max)
+    
+    # Use lax.map instead of vmap
+    E = jax.lax.map(process_timestep, vorticity, batch_size=batch_size)
+    
+    return E
+
 @partial(jit, static_argnames=['k_max'])
 def energy_spectrum_from_velocity(u_x, u_y, k_max=None):
     """
