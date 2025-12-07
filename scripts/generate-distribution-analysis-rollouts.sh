@@ -3,7 +3,7 @@
 #SBATCH --account m4558
 #SBATCH -C gpu                       # GPU constraint. Use gpu&hbm80g for 80GB A100s
 #SBATCH --gpus=1                     # 1 GPU per task - allows multiple tasks per node
-#SBATCH --qos debug 
+#SBATCH --qos regular 
 #SBATCH -o logs/evaluation-dec-6-task-%a-%j.out
 #SBATCH --ntasks=1                   # 1 task per array job
 #SBATCH --cpus-per-task=16           # 64 cores / 4 GPUs = 16 cores per GPU
