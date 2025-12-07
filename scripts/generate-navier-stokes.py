@@ -25,8 +25,9 @@ def generate_output_folder_name(args):
     folder_name = f"ns_{args.resolution}x{args.resolution}_visc_{args.viscosity}_drag_{args.drag}_T{args.simulation_time}_forcing_{args.forcing_func}"
     return os.path.join(args.output_dir, folder_name)
 
-
+import time
 def main():
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="Generate Navier Stokes")
 
     ## IO & Compute Parameters
@@ -157,11 +158,11 @@ def main():
     num_burn_in_frames = int(burn_in_time // save_dt)
 
     # Modify so that we save every single step without burn in
-    logger.info("Running so there is no burn in and saving the full output")
-    total_steps = int(total_time // stable_dt)
-    inner_steps = 1
-    outer_steps = total_steps
-    num_burn_in_frames = 0
+    # logger.info("Running so there is no burn in and saving the full output")
+    # total_steps = int(total_time // stable_dt)
+    # inner_steps = 1
+    # outer_steps = total_steps
+    # num_burn_in_frames = 0
     logger.info(f"Simulation Time: {simulation_time}, Burn-in Time: {burn_in_time}")
     logger.info(
         f"Number of Burn-in Frames: {num_burn_in_frames}, Real burn in time: {num_burn_in_frames * save_dt}"
@@ -295,7 +296,8 @@ def main():
             os.path.join(output_dir, f"batch_{batch_number}.npy"), batch_trajectories
         )
     logger.info("Done generating trajectories!")
-
+    end_time = time.time()
+    logger.info(f"NO COMPILE: Time taken: {end_time - start_time} seconds")
 
 if __name__ == "__main__":
     main()

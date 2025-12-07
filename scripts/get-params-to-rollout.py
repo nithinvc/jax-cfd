@@ -11,10 +11,17 @@ def sbatch_helper(json_fp):
     processed_paths = [
         p.replace(f'/global/cfs/cdirs/m4558/shared/meta-pde/evals/seed_{seed}/', '') for p in processed_paths
     ]
+    processed_paths = [p[:-1] if p.endswith('/') else p for p in processed_paths]
 
-    paths = ' \"'.join(processed_paths) + '\"'
+    paths = ""
+    for p in processed_paths:
+        paths += f" \"{p}\""
     print(paths)
-    print(" ".join([str(v) for v in viscosities]))
+    vis = ""
+    for v in viscosities:
+        vis += f" \"{v}\""
+    print(vis)
+    print('total number of rollouts: ', len(viscosities))
 
 
 
@@ -27,6 +34,7 @@ def main():
 
     if args.processed:
         sbatch_helper(args.json)
+        exit()
 
     data = json.load(open(args.json, 'r'))
     ic_index = args.ic_index
