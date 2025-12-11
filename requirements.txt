@@ -7,7 +7,6 @@ fonttools==4.59.0
 ipython==9.4.0
 ipython-pygments-lexers==1.1.1
 jax==0.7.0
--e file:///home/ray/default/jax-cfd
 jax-cuda12-pjrt==0.7.0
 jax-cuda12-plugin==0.7.0
 jaxlib==0.7.0

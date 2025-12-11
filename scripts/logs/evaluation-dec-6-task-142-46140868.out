@@ -1,0 +1,17 @@
+Running task 142: seed=, viscosity=, out_path=
+usage: generate-navier-stokes.py [-h] [--output_dir OUTPUT_DIR]
+                                 [--batch_size BATCH_SIZE]
+                                 [--num_trajectories NUM_TRAJECTORIES]
+                                 [--seed SEED] [--viscosity VISCOSITY]
+                                 [--drag DRAG] [--max_velocity MAX_VELOCITY]
+                                 [--max_courant_number MAX_COURANT_NUMBER]
+                                 [--resolution RESOLUTION] [--burn_in BURN_IN]
+                                 [--simulation_time SIMULATION_TIME]
+                                 [--save_dt SAVE_DT]
+                                 [--max_resolution MAX_RESOLUTION]
+                                 [--forcing_func {kolmogorov,transient,none}]
+                                 [--kolmogorov_scale KOLMOGOROV_SCALE]
+                                 [--kolmogorov_wavenumber KOLMOGOROV_WAVENUMBER]
+                                 [--transient_scale TRANSIENT_SCALE]
+                                 [--downsample DOWNSAMPLE]
+generate-navier-stokes.py: error: argument --viscosity: invalid float value: ''

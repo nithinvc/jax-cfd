@@ -1,0 +1,22 @@
+Running task 11: seed=2, viscosity=1.716186913351218e-05, out_path=ic_0_param_1.716186913351218e-05
+2025-12-06 19:58:13.792 | INFO     | __main__:main:79 - Output directory: /global/cfs/cdirs/m4558/shared/meta-pde/evals/seed_2/ic_0_param_1.716186913351218e-05/ns_1024x1024_visc_1.716186913351218e-05_drag_0.1_T15.0_forcing_kolmogorov
+2025-12-06 19:58:13.792 | INFO     | __main__:main:83 - Dumping arguments to /global/cfs/cdirs/m4558/shared/meta-pde/evals/seed_2/ic_0_param_1.716186913351218e-05/ns_1024x1024_visc_1.716186913351218e-05_drag_0.1_T15.0_forcing_kolmogorov/args.json
+2025-12-06 19:58:13.811 | INFO     | __main__:main:91 - Resolution: 1024x1024, Max Velocity: 7, Viscosity: 1.716186913351218e-05
+2025-12-06 19:58:13.811 | INFO     | __main__:main:94 - Max Resolution: 1024
+2025-12-06 19:58:13.811 | INFO     | __main__:main:106 - Max Resolution Stable Time Step: 0.0004382802251101832
+2025-12-06 19:58:13.812 | INFO     | __main__:main:111 - Stable time step: 0.0004382802251101832
+2025-12-06 19:58:13.812 | INFO     | __main__:main:122 - Forcing function: kolmogorov
+2025-12-06 19:58:13.812 | INFO     | __main__:main:129 - Forcing function args: scale=1, k=2
+2025-12-06 19:58:18.977 | INFO     | __main__:main:147 - Time stepping scheme: Crank-Nicolson RK4
+2025-12-06 19:58:18.977 | INFO     | __main__:main:148 - Anti-aliasing: True
+2025-12-06 19:58:18.978 | INFO     | __main__:main:149 - Drag: 0.1
+2025-12-06 19:58:18.978 | INFO     | __main__:main:166 - Simulation Time: 15.0, Burn-in Time: 41.0
+2025-12-06 19:58:18.978 | INFO     | __main__:main:167 - Number of Burn-in Frames: 164, Real burn in time: 41.0
+2025-12-06 19:58:18.979 | INFO     | __main__:main:170 - Total Simulation Time: 56.0, Save Time: 0.25
+2025-12-06 19:58:18.979 | INFO     | __main__:main:171 - Inner Steps: 570.0, Outer Steps: 224.0
+2025-12-06 19:58:18.979 | INFO     | __main__:main:211 - Initial condition downsample factor: 1.0
+2025-12-06 19:58:19.002 | INFO     | __main__:main:280 - Batch Size: 4, Num Batches: 1, Seed: 42, Total Trajectories: 4
+2025-12-06 19:58:19.003 | INFO     | __main__:main:283 - Generating trajectories...
+  0%|          | 0/1 [00:00<?, ?it/s]100%|██████████| 1/1 [12:31<00:00, 751.16s/it]100%|██████████| 1/1 [12:31<00:00, 751.16s/it]
+2025-12-06 20:10:50.190 | INFO     | __main__:main:298 - Done generating trajectories!
+2025-12-06 20:10:50.190 | INFO     | __main__:main:300 - NO COMPILE: Time taken: 756.4206104278564 seconds
